@@ -33,16 +33,20 @@ class MyAI ( Agent ):
         self.left = False
         self.forward = False
         self.right = False
+        self.wentAdj = False
         
         self.gameStart = True
         self.wumpusKilled = False
         self.arrow = True
-        self.currLoc = (1,1)
+        self.goHome = False
+        self.currLoc = (0,0)
         self.stenchList = set()
         self.breezeList = set()
         self.safeList = set()
         self.possiblePitList = set()
         self.possibleWumpusList = set()
+        self.PitList = set()
+        self.wumpusLoc = ()
         self.currDir = "RIGHT"
         self.boundaryLoc = [10,10]
         self.goldLooted   = False
@@ -64,38 +68,27 @@ class MyAI ( Agent ):
         # YOUR CODE BEGINS
         # ======================================================================
         
-        print (" \nFor Debugging Purposes:")
-        print ("Current Location: " + str(self.currLoc) + " Current Direction: " + self.currDir)
-        print ("Stench List: " + str(self.stenchList) + " Breeze List: " + str(self.breezeList))
-        print ("Wumpus List: " + str(self.possibleWumpusList) + " Pit List: " + str(self.possiblePitList))
-        print ("Safe List:" + str(self.safeList) + "GameStart: " + str(self.gameStart))
-        print ("Boundary Location: " + str(self.boundaryLoc))
 
-        x, y = self.currLoc[0], self.currLoc[1]
 
-        self.safeList.add((x,y))
-        adjacentBox = self.findAdjacentTiles(x,y)
-
-        print("Possible Move List: " + str(adjacentBox))
-
-        if self.left == True:
-            self.left = False
-            return self.move(self.currLoc, self.currDir, self.currLoc, "LEFT")
-        
-        if self.forward == True:
-            self.forward = False
-            return self.move(self.currDir, self.currLoc, self.currDir) 
 
         if self.gameStart == True:
             if breeze:
                 return Agent.Action.CLIMB
-            if stench:
-                self.arrow = False
-                return Agent.Action.SHOOT
+
+        if stench and self.arrow:
+            self.stenchList.add(self.currLoc)
+            self.arrow = False
+            return Agent.Action.SHOOT
 
         if scream:
             self.wumpusKilled = True
             self.possibleWumpusList.clear()
+            self.stenchList.clear()
+        elif self.arrow == False:
+            if self.currDir == ("RIGHT"):
+                self.wumpusLoc = (self.currLoc[0], self.currLoc[1] + 1)
+            if self.currDir == ("UP"):
+                self.wumpusLoc = (self.currLoc[0] + 1, self.currLoc[1])
 
         if self.goldLooted == True:
             #backtrack
@@ -103,35 +96,61 @@ class MyAI ( Agent ):
         
         self.gameStart = False
 
-
+        x, y = self.currLoc[0], self.currLoc[1]
 
         if bump:
             if self.currDir == "RIGHT":
                 self.currLoc = (x - 1, y)
                 self.boundaryLoc[0] = x - 1
+                adjacentBox = self.findAdjacentTiles(x-1,y)
             if self.currDir == "UP":
                 self.currLoc = (x, y - 1)
                 self.boundaryLoc[1] = y - 1
+                adjacentBox = self.findAdjacentTiles(x,y-1)
+            x, y = self.currLoc[0], self.currLoc[1]
 
         
+        self.safeList.add((x,y))
+        adjacentBox = self.findAdjacentTiles(x,y)
 
 
         if stench and not self.wumpusKilled:
+            self.stenchList.add((x,y))
             for i in adjacentBox:
                 if i not in self.safeList:
                     self.possibleWumpusList.add(i)
 
         if breeze:
+            self.breezeList.add((x,y))
             for i in adjacentBox:
                 if i not in self.safeList:
                     self.possiblePitList.add(i)
 
+        print (" \nFor Debugging Purposes:")
+        print ("Current Location: " + str(self.currLoc) + " Current Direction: " + self.currDir)
+        print ("Stench List: " + str(self.stenchList) + " Breeze List: " + str(self.breezeList))
+        print ("Possible Wumpus List: " + str(self.possibleWumpusList) + "Possible Pit List: " + str(self.possiblePitList))
+        print ("GameStart: " + str(self.gameStart))
+        print ("Boundary Location: " + str(self.boundaryLoc))
+        print ("Possible Move List: " + str(adjacentBox) + " Safe List:" + str(self.safeList))
+        print ("Stench List: " + str(self.stenchList) + " Breeze List: " + str(self.breezeList))
+
+
+        if self.left == True:
+            self.left = False
+            return self.move(self.currDir, self.currLoc, "LEFT")
+        
+        if self.forward == True:
+            self.forward = False
+            return self.move(self.currDir, self.currLoc, self.currDir)
+
         if glitter:
             self.goldLooted = True
+            self.goHome = True
             #backtrack
             return Agent.Action.GRAB
 
-        return self.bestMove(adjacentBox, self.currDir, self.currLoc, self.possiblePitList, self.possibleWumpusList)
+        return self.bestMove(adjacentBox, self.currDir, self.currLoc, self.possiblePitList, self.possibleWumpusList, stench, breeze, scream, self.arrow)
         
         '''if glitter:
             self.goldLooted = True
@@ -140,13 +159,10 @@ class MyAI ( Agent ):
         if stench:
             #self.safeTile.append(currLoc)
             self.stenchList.append(self.currLoc)
-
             return self.move("BACK", self.currLoc, self.currDir)
-
         if breeze:  
             #self.safeTile.append(currLoc)
             self.breezeList.append(self.currLoc)
-
             return self.move("BACK", self.currLoc, self.currDir)
         
         if bump:
@@ -172,9 +188,10 @@ class MyAI ( Agent ):
     def findAdjacentTiles(self, x, y):
         li =[(x+1,y),(x-1,y),(x,y+1),(x,y-1)]
 
-        x = [i for i in li if i[0]%self.boundaryLoc[0] == 0 or i[1]%self.boundaryLoc[1] == 0]
+        #x = [i for i in li if i[0]%self.boundaryLoc[0] == self.boundaryLoc[0] or i[1]%self.boundaryLoc[1] == self.boundaryLoc[1] or i[0] == -1 or i[1] == -1]
+        x = [i for i in li if (i[0] > self.boundaryLoc[0]) or (i[1] > self.boundaryLoc[1]) or (i[0] == -1) or (i[1] == -1)]
     
-        return [i for i in li if i not in x]
+        return {i for i in li if i not in x}
 
     '''def updateDir(self, direct, cDirect):
         if direct == "LEFT":
@@ -206,16 +223,79 @@ class MyAI ( Agent ):
         elif cDirect == "LEFT":
             self.currLoc[0] -= 1'''
                 
-    def bestMove(self, pMove, cDir, cLoc, pPit, pWumpus):
+    def bestMove(self, pMove, cDir, cLoc, pPit, pWumpus, stn, brz, scrm, arr):
 
         '''
             
         '''
 
+        pMove = {i for i in pMove if i not in (self.PitList.union({self.wumpusLoc}))}
+
+        up = False
+        down = False
+        left = False
+        right = False
+
+        for i in pMove:
+            if (i[0] - cLoc[0]) == 1:
+                right = True
+                print ("Right is True")
+            if (i[0] - cLoc[0]) == -1:
+                left = True
+                print ("Left is True")
+            if (i[1] - cLoc[1]) == 1:
+                up = True
+                print ("Up is True")
+            if (i[1] - cLoc[1]) == -1:
+                down = True
+                print ("Down is True")
+
+        if self.goHome == True:
+            if cLoc == (0,0):
+                return Agent.Action.CLIMB
+
+            if (cDir == "LEFT" or cDir == "RIGHT") and left == True:
+                return self.move(cDir, cLoc, "LEFT")
+            else:
+                return self.move(cDir, cLoc, "DOWN")
+            if (cDir == "UP" or cDir == "DOWN") and down == True:
+                return self.move(cDir, cLoc, "DOWN")
+            else:
+                return self.move(cDir, cLoc, "LEFT")
 
 
-        return self.move(cDir, cLoc, "UP")
+        if self.wentAdj == True:
+            if cDir == "LEFT":
+                return self.move(cDir, cLoc, "UP")
+            if cDir == "DOWN":
+                return self.move(cDir, cLoc, "RIGHT")
 
+        if stn and scrm == True:
+            return self.move(cDir, cLoc, cDir)
+
+        if brz:
+            self.wentAdj = True
+            return self.goAdj(cLoc, cDir)
+
+        if cDir == "UP" and up == True:
+            return self.move(cDir, cLoc, cDir)
+        if cDir == "DOWN" and down == True:
+            return self.move(cDir, cLoc, cDir)
+        if cDir == "LEFT" and left == True:
+            return self.move(cDir, cLoc, cDir)
+        if cDir == "RIGHT" and right == True:
+            return self.move(cDir, cLoc, cDir)
+
+
+    def goAdj(self, cLoc, cDir):
+        if cDir == "UP":
+            return self.move(cDir,cLoc,"DOWN")
+        if cDir == "DOWN":
+            return self.move(cDir,cLoc,"UP")
+        if cDir == "LEFT":
+            return self.move(cDir,cLoc,"RIGHT")
+        if cDir == "RIGHT":
+            return self.move(cDir,cLoc,"LEFT")
 
     def cost(self, cDir, fDir):
 
